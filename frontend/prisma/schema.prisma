@@ -1,0 +1,57 @@
+// This is your Prisma schema file
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              String   @id @default(cuid())
+  firstName       String
+  lastName        String
+  email           String   @unique
+  password        String
+  walletAddress   String?  // Optional at registration
+  balance         Float    @default(0.0)
+  
+  // ADD THESE THREE LINES:
+  escrowsAsBuyer  Escrow[] @relation("BuyerRelation")
+  escrowsAsSeller Escrow[] @relation("SellerRelation")
+  escrowsAsAdmin  Escrow[] @relation("AdminRelation")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Escrow {
+  id              String       @id @default(cuid())
+  title           String        // ← needed
+  currency        String       @default("USD")  // ← needed (USD/USDT)
+  amount          Decimal
+  description     String?      // ← optional
+  deadline        DateTime?    // ← optional
+  status          EscrowStatus @default(PENDING)
+  onChainAddress  String?      @unique 
+  
+  buyerId         String
+  buyer           User         @relation("BuyerRelation", fields: [buyerId], references: [id])
+  sellerId        String
+  seller          User         @relation("SellerRelation", fields: [sellerId], references: [id])
+  creatorId       String
+  creator         User         @relation("AdminRelation", fields: [creatorId], references: [id])
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+enum EscrowStatus {
+  PENDING      // Created but not funded
+  FUNDED       // Money moved from Stripe to User Balance
+  LOCKED       // Money moved from User Balance to Smart Contract
+  RELEASED     // Trade complete
+  DISPUTED     // Admin intervention needed
+  CANCELLED    // Refunded before locking
+}
