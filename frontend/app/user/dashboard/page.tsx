@@ -1,32 +1,46 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Swal from "sweetalert2";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch("/api/me");
-        if (!res.ok) {
-          router.push("/login");
-          return;
-        }
-        const data = await res.json();
-        setUser(data.user);
-      } catch {
+  const fetchUser = async () => {
+    try {
+      const res = await fetch("/api/me");
+      if (!res.ok) {
         router.push("/login");
-      } finally {
-        setLoading(false);
+        return;
       }
-    };
+      const data = await res.json();
+      setUser(data.user);
+    } catch {
+      router.push("/login");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchUser();
+
+    // 🔥 If Stripe redirected with success
+    if (searchParams.get("payment") === "success") {
+      Swal.fire({
+        icon: "success",
+        title: "Payment Successful",
+        text: "Funds added to your wallet!",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    }
   }, []);
 
   const handleLogout = async () => {
@@ -34,10 +48,8 @@ export default function DashboardPage() {
     await Swal.fire({
       icon: "success",
       title: "Logged Out",
-      text: "You have been logged out successfully.",
-      confirmButtonColor: "#2563eb",
-      timer: 1500,
-      timerProgressBar: true,
+      timer: 1200,
+      showConfirmButton: false,
     });
     router.push("/login");
   };
@@ -84,13 +96,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-500 text-lg">Redirecting...</p>
-      </div>
-    );
-  }
+  if (!user) return null;
 
   const allEscrows = [
     ...user.escrowsAsBuyer.map((e: any) => ({ ...e, role: "Buyer" })),
@@ -98,12 +104,15 @@ export default function DashboardPage() {
   ];
 
   const totalEscrows = allEscrows.length;
+
   const active = allEscrows.filter(
     (e) => e.status === "LOCKED" || e.status === "FUNDED"
   ).length;
+
   const released = allEscrows.filter(
     (e) => e.status === "RELEASED"
   ).length;
+
   const disputed = allEscrows.filter(
     (e) => e.status === "DISPUTED"
   ).length;
@@ -112,16 +121,19 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-white">
 
       {/* Header */}
-      <header className="flex justify-between items-center px-10 py-5">
+      <header className="flex justify-between items-center px-10 py-5 border-b">
         <Link href="/" className="text-2xl font-bold text-blue-600">
           Cudobe
         </Link>
-        <button
-          onClick={handleLogout}
-          className="bg-gray-100 px-4 py-2 rounded-lg text-sm hover:bg-gray-200 transition"
-        >
-          Logout
-        </button>
+
+        <div className="flex gap-4">
+          <button
+            onClick={handleLogout}
+            className="bg-gray-100 px-4 py-2 rounded-lg text-sm hover:bg-gray-200 transition"
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
       <div className="px-10 py-8">
@@ -131,11 +143,6 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold text-gray-900">
             Welcome back, {user.firstName} 👋
           </h1>
-          <p className="text-gray-500 mt-1">
-            {user.walletAddress
-              ? `Wallet: ${user.walletAddress}`
-              : "No wallet connected yet"}
-          </p>
           <p className="text-gray-400 text-sm mt-1">
             {user.email}
           </p>
@@ -146,16 +153,24 @@ export default function DashboardPage() {
           <div>
             <p className="text-sm opacity-80">Available Balance</p>
             <h2 className="text-3xl font-bold mt-2">
-              ${Number(user.balance).toFixed(2)}
+              ${Number(user.balance || 0).toFixed(2)}
             </h2>
           </div>
 
-          <button
-            onClick={handleAddFunds}
-            className="bg-white text-black px-5 py-2 rounded-lg font-medium hover:bg-gray-200 transition"
-          >
-            + Add Funds
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.push("/transactions")}
+              className="bg-white/10 text-white border border-white/20 px-5 py-2 rounded-lg font-medium hover:bg-white/20 transition"
+            >
+              Transaction History
+            </button>
+            <button
+              onClick={handleAddFunds}
+              className="bg-white text-black px-5 py-2 rounded-lg font-medium hover:bg-gray-200 transition"
+            >
+              + Add Funds
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -172,6 +187,7 @@ export default function DashboardPage() {
             <h2 className="text-xl font-semibold text-gray-800">
               Recent Escrows
             </h2>
+
             <button
               onClick={() => router.push("/escrow/create")}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
@@ -183,7 +199,7 @@ export default function DashboardPage() {
           <div className="overflow-x-auto">
             {allEscrows.length === 0 ? (
               <p className="text-gray-400 text-center py-8">
-                No escrows yet. Create your first one!
+                No escrows yet.
               </p>
             ) : (
               <table className="w-full text-left">
@@ -192,7 +208,6 @@ export default function DashboardPage() {
                     <th className="py-3">Title</th>
                     <th>Role</th>
                     <th>Amount</th>
-                    <th>Currency</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -210,7 +225,6 @@ export default function DashboardPage() {
                       </td>
                       <td>{escrow.role}</td>
                       <td>${Number(escrow.amount).toFixed(2)}</td>
-                      <td>{escrow.currency}</td>
                       <td>
                         <StatusBadge status={escrow.status} />
                       </td>

@@ -23,16 +23,29 @@ export async function POST(req: NextRequest) {
       const amount = Number(session.metadata?.amount);
 
       if (userId && amount) {
-        await prisma.user.update({
-          where: { id: userId },
-          data: {
-            balance: {
-              increment: amount,
+        await prisma.$transaction([
+          // Update user balance
+          prisma.user.update({
+            where: { id: userId },
+            data: {
+              balance: {
+                increment: amount,
+              },
             },
-          },
-        });
+          }),
+          // ✅ Save transaction record so history works
+          prisma.transaction.create({
+            data: {
+              userId,
+              amount,
+              type: "CREDIT",
+              stripeId: session.id,
+              status: "SUCCESS",
+            },
+          }),
+        ]);
 
-        console.log("✅ Wallet updated");
+        console.log(`✅ Wallet updated and transaction saved: $${amount} for user ${userId}`);
       }
     }
 

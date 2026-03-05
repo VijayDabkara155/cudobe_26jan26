@@ -1,4 +1,3 @@
-// This is your Prisma schema file
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
@@ -14,10 +13,12 @@ model User {
   lastName        String
   email           String   @unique
   password        String
-  walletAddress   String?  // Optional at registration
-  balance         Float    @default(0.0)
-  
-  // ADD THESE THREE LINES:
+  walletAddress   String?
+  balance         Decimal  @default(0.0)
+
+  // Relations
+  transactions    Transaction[]
+
   escrowsAsBuyer  Escrow[] @relation("BuyerRelation")
   escrowsAsSeller Escrow[] @relation("SellerRelation")
   escrowsAsAdmin  Escrow[] @relation("AdminRelation")
@@ -26,20 +27,36 @@ model User {
   updatedAt       DateTime @updatedAt
 }
 
+model Transaction {
+  id        String           @id @default(cuid())
+
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+
+  amount    Decimal
+  type      TransactionType
+  stripeId  String?          // Stripe checkout session ID
+  status    String           @default("SUCCESS")
+
+  createdAt DateTime         @default(now())
+}
+
 model Escrow {
   id              String       @id @default(cuid())
-  title           String        // ← needed
-  currency        String       @default("USD")  // ← needed (USD/USDT)
+  title           String
+  currency        String       @default("USD")
   amount          Decimal
-  description     String?      // ← optional
-  deadline        DateTime?    // ← optional
+  description     String?
+  deadline        DateTime?
   status          EscrowStatus @default(PENDING)
   onChainAddress  String?      @unique 
-  
+
   buyerId         String
   buyer           User         @relation("BuyerRelation", fields: [buyerId], references: [id])
+
   sellerId        String
   seller          User         @relation("SellerRelation", fields: [sellerId], references: [id])
+
   creatorId       String
   creator         User         @relation("AdminRelation", fields: [creatorId], references: [id])
 
@@ -47,11 +64,16 @@ model Escrow {
   updatedAt       DateTime     @updatedAt
 }
 
+enum TransactionType {
+  CREDIT
+  DEBIT
+}
+
 enum EscrowStatus {
-  PENDING      // Created but not funded
-  FUNDED       // Money moved from Stripe to User Balance
-  LOCKED       // Money moved from User Balance to Smart Contract
-  RELEASED     // Trade complete
-  DISPUTED     // Admin intervention needed
-  CANCELLED    // Refunded before locking
+  PENDING
+  FUNDED
+  LOCKED
+  RELEASED
+  DISPUTED
+  CANCELLED
 }
